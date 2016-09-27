@@ -162,19 +162,17 @@ class Store:
 
             for fn in filenames:
                 fn = os.path.join(dirpath, fn)
-
                 fullfn = os.path.join(srcdir, fn)
-                sz = os.path.getsize(fullfn)
-                st = os.stat(fullfn)
+                st = os.lstat(fullfn)
 
                 fn2 = os.path.join(self.mount_point, fn)
-                if sz < self.minsz:
+                if st.st_size < self.minsz:
                     shutil.copy2(fullfn, fn2)
                     os.chown(fn2, st.st_uid, st.st_gid)
                 else:
                     md5 = _get_file_md5(fullfn)
                     with open(fn2, "wb") as f:
-                        f.write(struct.pack(self.fmt, sz, md5))
+                        f.write(struct.pack(self.fmt, st.st_size, md5))
                         os.fchown(f.fileno(), st.st_uid, st.st_gid)
                     shutil.copymode(fullfn, fn2)
                     shutil.copystat(fullfn, fn2)
@@ -200,7 +198,7 @@ class Store:
 
         if not os.path.exists(dstfile) or os.path.isdir(dstfile):
             return False
-        if os.path.getsize(dstfile) < self.minsz:
+        if _get_file_size(dstfile) < self.minsz:
             with open(dstfile, "rb") as f:
                 with open(srcfile, "rb") as f2:
                     if f.read() != f2.read():
@@ -208,7 +206,7 @@ class Store:
         else:
             with open(dstfile, "rb") as f:
                 sz, md5 = struct.unpack(self.fmt, f.read())
-                if sz != os.path.getsize(srcfile):
+                if sz != _get_file_size(srcfile):
                     return False
                 if md5 != _get_file_md5(srcfile):
                     return False
@@ -243,6 +241,10 @@ def _exec(cmd):
         return 0
     else:
         return (proc.returncode, err.decode("iso-8859-1"))
+
+
+def _get_file_size(filepath):
+    return os.lstat(filepath).st_size
 
 
 def _get_file_md5(filepath):

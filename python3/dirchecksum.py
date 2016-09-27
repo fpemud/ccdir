@@ -237,7 +237,7 @@ def _create_store_file(store_file):
             f.write(data)
 
 #   ret = _exec("/sbin/mkfs.ext4 -O ^has_journal \"%s\"" % (store_file))
-    ret = _exec("/sbin/mkfs.ext2 -b 1024 \"%s\"" % (store_file))
+    ret = _exec("/sbin/mkfs.ext2 -b 1024 -i 1024 \"%s\"" % (store_file))
     if ret != 0:
         raise InitError("Failed to create store file.")
 

@@ -235,6 +235,7 @@ def _exec(cmd):
 
 
 def _get_file_md5(filepath):
+    # some files are big, so we need to feed data in this way
     hash = hashlib.md5()
     with open(filepath, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b''):

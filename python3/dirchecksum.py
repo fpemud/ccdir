@@ -218,10 +218,11 @@ class Store:
 def _create_store_file(store_file):
     data = bytearray(1024)
     with open(store_file, "wb") as f:
-        for i in range(0, 1000 * 1024):
+        for i in range(0, 3000 * 1024):
             f.write(data)
 
-    ret = _exec("/sbin/mkfs.ext4 -O ^has_journal \"%s\"" % (store_file))
+#   ret = _exec("/sbin/mkfs.ext4 -O ^has_journal \"%s\"" % (store_file))
+    ret = _exec("/sbin/mkfs.ext2 -b 1024 \"%s\"" % (store_file))
     if ret != 0:
         raise InitError("Failed to create store file.")
 

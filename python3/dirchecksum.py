@@ -138,10 +138,21 @@ class Store:
 
         for dirpath, dirnames, filenames in os.walk(srcdir):
             dirpath = dirpath[plen:]
-            if excluding_patterns is not None and _in_patterns(dirpath, excluding_patterns):
-                continue
-            if including_patterns is not None and not _in_patterns(dirpath, including_patterns):
-                continue
+
+            if excluding_patterns is not None:
+                for d in dirnames:
+                    if _in_patterns(os.path.join(dirpath, d), excluding_patterns):
+                        dirnames.remove(d)
+                for f in filenames:
+                    if _in_patterns(os.path.join(dirpath, f), excluding_patterns):
+                        filenames.remove(f)
+            if including_patterns is not None:
+                for d in dirnames:
+                    if not _in_patterns(os.path.join(dirpath, d), including_patterns):
+                        dirnames.remove(d)
+                for f in filenames:
+                    if not _in_patterns(os.path.join(dirpath, f), including_patterns):
+                        filenames.remove(f)
 
             if dirpath == "":
                 dirpath2 = self.mount_point
@@ -151,10 +162,6 @@ class Store:
 
             for fn in filenames:
                 fn = os.path.join(dirpath, fn)
-                if excluding_patterns is not None and _in_patterns(fn, excluding_patterns):
-                    continue
-                if including_patterns is not None and not _in_patterns(fn, including_patterns):
-                    continue
 
                 fullfn = os.path.join(srcdir, fn)
                 sz = os.path.getsize(fullfn)

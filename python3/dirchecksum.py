@@ -165,9 +165,7 @@ class Store:
                     shutil.copy2(fullfn, fn2)
                     os.chown(fn2, st.st_uid, st.st_gid)
                 else:
-                    md5 = None
-                    with open(fullfn, "rb") as f:
-                        md5 = hashlib.md5(f.read()).digest()
+                    md5 = _get_file_md5(fullfn)
                     with open(fn2, "wb") as f:
                         f.write(struct.pack(self.fmt, sz, md5))
                         os.fchown(f.fileno(), st.st_uid, st.st_gid)
@@ -202,16 +200,15 @@ class Store:
                 sz, md5 = struct.unpack(self.fmt, f.read())
                 if sz != os.path.getsize(srcfile):
                     return False
-                with open(srcfile, "rb") as f2:
-                    if md5 != hashlib.md5(f2.read()).digest():
-                        return False
+                if md5 != _get_file_md5(srcfile):
+                    return False
         return True
 
 
 def _create_store_file(store_file):
     data = bytearray(1024)
     with open(store_file, "wb") as f:
-        for i in range(0, 100 * 1024):
+        for i in range(0, 1000 * 1024):
             f.write(data)
 
     ret = _exec("/sbin/mkfs.ext4 -O ^has_journal \"%s\"" % (store_file))
@@ -235,3 +232,11 @@ def _exec(cmd):
         return 0
     else:
         return (proc.returncode, err.decode("iso-8859-1"))
+
+
+def _get_file_md5(filepath):
+    hash = hashlib.md5()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b''):
+            hash.update(chunk)
+    return hash.digest()

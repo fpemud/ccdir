@@ -166,16 +166,21 @@ class Store:
                 st = os.lstat(fullfn)
 
                 fn2 = os.path.join(self.mount_point, fn)
-                if st.st_size < self.minsz:
-                    shutil.copy2(fullfn, fn2)
-                    os.chown(fn2, st.st_uid, st.st_gid)
+                if os.path.islink(fullfn):
+                    linkto = os.readlink(fullfn)
+                    os.symlink(linkto, fn2)
+                    os.lchown(fn2, st.st_uid, st.st_gid)
                 else:
-                    md5 = _get_file_md5(fullfn)
-                    with open(fn2, "wb") as f:
-                        f.write(struct.pack(self.fmt, st.st_size, md5))
-                        os.fchown(f.fileno(), st.st_uid, st.st_gid)
-                    shutil.copymode(fullfn, fn2)
-                    shutil.copystat(fullfn, fn2)
+                    if st.st_size < self.minsz:
+                        shutil.copy2(fullfn, fn2)
+                        os.chown(fn2, st.st_uid, st.st_gid)
+                    else:
+                        md5 = _get_file_md5(fullfn)
+                        with open(fn2, "wb") as f:
+                            f.write(struct.pack(self.fmt, st.st_size, md5))
+                            os.fchown(f.fileno(), st.st_uid, st.st_gid)
+                        shutil.copymode(fullfn, fn2)
+                        shutil.copystat(fullfn, fn2)
 
     def getdir(self):
         if self.mode == "w":
@@ -198,18 +203,28 @@ class Store:
 
         if not os.path.exists(dstfile) or os.path.isdir(dstfile):
             return False
-        if _get_file_size(dstfile) < self.minsz:
-            with open(dstfile, "rb") as f:
-                with open(srcfile, "rb") as f2:
-                    if f.read() != f2.read():
-                        return False
+
+        if os.path.islink(srcfile):
+            if not os.path.islink(dstfile):
+                return False
+            if os.readlink(srcfile) != os.readlink(dstfile):
+                return False
         else:
-            with open(dstfile, "rb") as f:
-                sz, md5 = struct.unpack(self.fmt, f.read())
-                if sz != _get_file_size(srcfile):
-                    return False
-                if md5 != _get_file_md5(srcfile):
-                    return False
+            if os.path.islink(dstfile):
+                return False
+            if _get_file_size(dstfile) < self.minsz:
+                with open(dstfile, "rb") as f:
+                    with open(srcfile, "rb") as f2:
+                        if f.read() != f2.read():
+                            return False
+            else:
+                with open(dstfile, "rb") as f:
+                    sz, md5 = struct.unpack(self.fmt, f.read())
+                    if sz != _get_file_size(srcfile):
+                        return False
+                    if md5 != _get_file_md5(srcfile):
+                        return False
+
         return True
 
 

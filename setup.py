@@ -10,8 +10,8 @@ except:
     from distutils.core import setup
 
 # check Python's version
-if sys.version_info < (3, 2):
-    sys.stderr.write('This module requires at least Python 3.2\n')
+if sys.version_info < (3, 4):
+    sys.stderr.write('This module requires at least Python 3.4\n')
     sys.exit(1)
 
 # check linux platform
@@ -28,24 +28,23 @@ classif = [
     'Natural Language :: English',
     'Operating System :: POSIX :: Linux',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3.2',
-    'Programming Language :: Python :: 3.3',
     'Programming Language :: Python :: 3.4',
+    'Programming Language :: Python :: 3.5',
     'Topic :: Software Development :: Libraries :: Python Modules',
 ]
 
 # Do setup
 setup(
-    name='strict_pgs',
+    name='dirchecksum',
     version='0.0.1',
-    description='Operating passwd/group/shadow in a strict manner',
+    description='Checksum operation for a whole directory',
     author='Fpemud',
     author_email='fpemud@sina.com',
     license='GPLv3 License',
     platforms='Linux',
     classifiers=classif,
-    url='http://github.com/fpemud/strict_pgs',
+    url='http://github.com/fpemud/dirchecksum',
     download_url='',
-    py_modules=['strict_pgs'],
+    py_modules=['dirchecksum'],
     package_dir={'': 'python3'},
 )

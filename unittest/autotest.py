@@ -20,7 +20,8 @@ class TestSave(unittest.TestCase):
             f.save(self.srcdir)
 
     def tearDown(self):
-        os.unlink(self.storeFile)
+        if os.path.exists(self.storeFile):
+            os.unlink(self.storeFile)
 
 
 class TestSaveBig(unittest.TestCase):
@@ -47,14 +48,21 @@ class TestCmpFile(unittest.TestCase):
         self.storeFile = os.path.join(curDir, "store.dat")
 
     def runTest(self):
-        with dirchecksum.Store(self.storeFile, "rw") as f:
+        with dirchecksum.Store(self.storeFile, "w") as f:
             f.save(self.srcdir)
+
         with dirchecksum.Store(self.storeFile, "r") as f:
-            self.assertTrue(f.cmpfile(self.srcdir, "a/a/short.txt"))
-            self.assertTrue(f.cmpfile(self.srcdir, "a/a/long.txt"))
+            srcfile1 = os.path.join(self.srcdir, "a/a/short.txt")
+            dstfile1 = os.path.join(f.getdir(), "a/a/short.txt")
+            self.assertTrue(f.cmpfile(srcfile1, dstfile1))
+
+            srcfile2 = os.path.join(self.srcdir, "a/a/long.txt")
+            dstfile2 = os.path.join(f.getdir(), "a/a/long.txt")
+            self.assertTrue(f.cmpfile(srcfile2, dstfile2))
 
     def tearDown(self):
-        os.unlink(self.storeFile)
+        if os.path.exists(self.storeFile):
+            os.unlink(self.storeFile)
 
 
 def suite():

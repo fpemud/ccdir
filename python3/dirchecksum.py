@@ -71,6 +71,10 @@ class Store:
     priviledged operation.
     What a great world it would be if mount can be used by non-root!
 
+    We provide only getdir and cmpfile methods, which are building blocks
+    for a full-fledged file/directory compare algorithm, since it
+    varies on what should the result be.
+
     NOTE: There's a read-only implementation of ext4 for FUSE (https://github.com/gerard/ext4fuse),
     we may use it to eliminate the root user requirement when doing read
     operations in future.
@@ -94,14 +98,14 @@ class Store:
         try:
             if self.mode == "r":
                 ret = _exec("/bin/mount -t ext4 -o ro \"%s\" \"%s\"" % (store_file, self.mount_point))
-            elif self.mode == "w" or self.mode == "rw":
+            elif self.mode == "w":
                 if not os.path.exists(store_file):
                     _create_store_file(store_file)
                 ret = _exec("/bin/mount -t ext4 \"%s\" \"%s\"" % (store_file, self.mount_point))
             else:
                 assert False
             if ret != 0:
-                raise InitError("Mouting failed with return code %d." % (ret))
+                raise InitError("Mouting failed (%s)." % (ret[1]))
         except:
             if self.btmpdir:
                 os.rmdir(self.mount_point)
@@ -123,10 +127,15 @@ class Store:
     def save(self, srcdir, including_pattern=None, excluding_pattern=None):
         if self.mode == "r":
             raise ArgumentError("Operation \"save\" is not allowed for a read-only store.")
-        
+
         _remove_directory_content(self.mount_point)
 
-        plen = len(srcdir) + 1
+        srcdir = os.path.realpath(srcdir)
+        if srcdir == "/":
+            plen = 1
+        else:
+            plen = len(srcdir) + 1
+
         for dirpath, dirnames, filenames in os.walk(srcdir):
             dirpath = dirpath[plen:]
             if excluding_pattern is not None and fnmatch.fnmatch(dirpath, excluding_pattern):
@@ -134,8 +143,11 @@ class Store:
             if including_pattern is not None and not fnmatch.fnmatch(dirpath, including_pattern):
                 continue
 
-            dirpath2 = os.path.join(self.mount_point, dirpath)
-            os.mkdir(dirpath2)
+            if dirpath == "":
+                dirpath2 = self.mount_point
+            else:
+                dirpath2 = os.path.join(self.mount_point, dirpath)
+                os.mkdir(dirpath2)
 
             for fn in filenames:
                 fn = os.path.join(dirpath, fn)
@@ -148,64 +160,52 @@ class Store:
                 sz = os.path.getsize(fullfn)
                 st = os.stat(fullfn)
 
-                fn2 = os.path.join(dirpath2, fn)
+                fn2 = os.path.join(self.mount_point, fn)
                 if sz < self.minsz:
                     shutil.copy2(fullfn, fn2)
                     os.chown(fn2, st.st_uid, st.st_gid)
                 else:
                     md5 = None
                     with open(fullfn, "rb") as f:
-                        md5 = hashlib.md5(f.read())
+                        md5 = hashlib.md5(f.read()).digest()
                     with open(fn2, "wb") as f:
                         f.write(struct.pack(self.fmt, sz, md5))
-                        os.fchown(f, st.st_uid, st.st_gid)
-                    os.copymode(fullfn, fn2)
-                    os.copystat(fullfn, fn2)
+                        os.fchown(f.fileno(), st.st_uid, st.st_gid)
+                    shutil.copymode(fullfn, fn2)
+                    shutil.copystat(fullfn, fn2)
 
-    def cmpfile(self, srcdir, filepath, content_only=True):
+    def getdir(self):
+        return self.mount_point
+
+    def cmpfile(self, srcfile, dstfile):
         if self.mode == "w":
             raise ArgumentError("Operation \"cmpfile\" is not allowed for a write-only store.")
 
-        srcfile = os.path.join(srcdir, filepath)
         if not os.path.exists(srcfile):
-            raise ArgumentError("Parameter \"filepath\" does not exist.")
+            raise ArgumentError("Parameter \"srcfile\" does not exist.")
         if os.path.isdir(srcfile):
-            raise ArgumentError("Parameter \"filepath\" is a directory.")
+            raise ArgumentError("Parameter \"srcfile\" is a directory.")
 
-        dstfile = os.path.join(self.mount_point, filepath)
+        dstfile = os.path.realpath(dstfile)
+        if not dstfile.startswith(self.mount_point + "/"):
+            raise ArgumentError("Parameter \"dstfile\" must be in store file directory.")
         if not os.path.exists(dstfile) or os.path.isdir(dstfile):
             return False
 
-        if True:
-            if os.path.getsize(dstfile) < self.minsz:
-                with open(dstfile, "rb") as f:
-                    with open(srcfile, "rb") as f2:
-                        if f.read() != f2.read():
-                            return False
-            else:
-                with open(dstfile, "rb") as f:
-                    sz, md5 = struct.unpack(self.fmt, f.read())
-                    if sz != os.path.getsize(srcfile):
+        if os.path.getsize(dstfile) < self.minsz:
+            with open(dstfile, "rb") as f:
+                with open(srcfile, "rb") as f2:
+                    if f.read() != f2.read():
                         return False
-                    with open(srcfile, "rb") as f2:
-                        if md5 != hashlib.md5(f2.read()):
-                            return False
-
-        if not content_only:
-            s1 = _sig(os.stat(dstfile))
-            s2 = _sig(os.stat(srcfile))
-            if s1 != s2:
-                return False
-
+        else:
+            with open(dstfile, "rb") as f:
+                sz, md5 = struct.unpack(self.fmt, f.read())
+                if sz != os.path.getsize(srcfile):
+                    return False
+                with open(srcfile, "rb") as f2:
+                    if md5 != hashlib.md5(f2.read()).digest():
+                        return False
         return True
-
-    def getdir(self):
-        """
-        We provide getdir method instead of cmpdir since it varies on how
-        to compare directories and what should the result be.
-        """
-
-        return self.mount_point
 
 
 def _create_store_file(store_file):
@@ -227,15 +227,11 @@ def _remove_directory_content(dirpath):
         else:
             os.unlink(dn)
 
+
 def _exec(cmd):
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    proc.communicate()
-    return proc.returncode
-
-
-def _sig(st):
-    return (st.st_uid,
-            st.st_gid,
-            os.stat.S_IFMT(st.st_mode),
-            st.st_size,
-            st.st_mtime)
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = proc.communicate()
+    if proc.returncode == 0:
+        return 0
+    else:
+        return (proc.returncode, err.decode("iso-8859-1"))

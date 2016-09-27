@@ -124,7 +124,7 @@ class Store:
         if self.btmpdir:
             os.rmdir(self.mount_point)
 
-    def save(self, srcdir, including_pattern=None, excluding_pattern=None):
+    def save(self, srcdir, including_patterns=None, excluding_patterns=None):
         if self.mode == "r":
             raise ArgumentError("Operation \"save\" is not allowed for a read-only store.")
 
@@ -138,9 +138,9 @@ class Store:
 
         for dirpath, dirnames, filenames in os.walk(srcdir):
             dirpath = dirpath[plen:]
-            if excluding_pattern is not None and fnmatch.fnmatch(dirpath, excluding_pattern):
+            if excluding_patterns is not None and _in_patterns(dirpath, excluding_patterns):
                 continue
-            if including_pattern is not None and not fnmatch.fnmatch(dirpath, including_pattern):
+            if including_patterns is not None and not _in_patterns(dirpath, including_patterns):
                 continue
 
             if dirpath == "":
@@ -151,9 +151,9 @@ class Store:
 
             for fn in filenames:
                 fn = os.path.join(dirpath, fn)
-                if excluding_pattern is not None and fnmatch.fnmatch(fn, excluding_pattern):
+                if excluding_patterns is not None and _in_patterns(fn, excluding_patterns):
                     continue
-                if including_pattern is not None and not fnmatch.fnmatch(fn, including_pattern):
+                if including_patterns is not None and not _in_patterns(fn, including_patterns):
                     continue
 
                 fullfn = os.path.join(srcdir, fn)
@@ -173,6 +173,9 @@ class Store:
                     shutil.copystat(fullfn, fn2)
 
     def getdir(self):
+        if self.mode == "w":
+            raise ArgumentError("Operation \"getdir\" is not allowed for a write-only store.")
+
         return self.mount_point
 
     def cmpfile(self, srcfile, dstfile):
@@ -187,9 +190,9 @@ class Store:
         dstfile = os.path.realpath(dstfile)
         if not dstfile.startswith(self.mount_point + "/"):
             raise ArgumentError("Parameter \"dstfile\" must be in store file directory.")
+
         if not os.path.exists(dstfile) or os.path.isdir(dstfile):
             return False
-
         if os.path.getsize(dstfile) < self.minsz:
             with open(dstfile, "rb") as f:
                 with open(srcfile, "rb") as f2:
@@ -241,3 +244,10 @@ def _get_file_md5(filepath):
         for chunk in iter(lambda: f.read(4096), b''):
             hash.update(chunk)
     return hash.digest()
+
+
+def _in_patterns(s, patterns):
+    for pat in patterns:
+        if fnmatch.fnmatch(s, pat):
+            return True
+    return False

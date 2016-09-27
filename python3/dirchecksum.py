@@ -130,7 +130,7 @@ class Store:
 
         _remove_directory_content(self.mount_point)
 
-        srcdir = os.path.realpath(srcdir)
+        srcdir = os.path.abspath(srcdir)
         if srcdir == "/":
             plen = 1
         else:
@@ -192,22 +192,24 @@ class Store:
         if self.mode == "w":
             raise ArgumentError("Operation \"cmpfile\" is not allowed for a write-only store.")
 
-        if not os.path.exists(srcfile):
+        if not os.path.lexists(srcfile):
             raise ArgumentError("Parameter \"srcfile\" does not exist.")
         if os.path.isdir(srcfile):
             raise ArgumentError("Parameter \"srcfile\" is a directory.")
 
-        dstfile = os.path.realpath(dstfile)
+        dstfile = os.path.abspath(dstfile)
         if not dstfile.startswith(self.mount_point + "/"):
             raise ArgumentError("Parameter \"dstfile\" must be in store file directory.")
 
-        if not os.path.exists(dstfile) or os.path.isdir(dstfile):
+        if not os.path.lexists(dstfile) or os.path.isdir(dstfile):
             return False
 
         if os.path.islink(srcfile):
             if not os.path.islink(dstfile):
+                print("debug1", dstfile)
                 return False
             if os.readlink(srcfile) != os.readlink(dstfile):
+                print("debug2", os.readlink(srcfile), os.readlink(dstfile))
                 return False
         else:
             if os.path.islink(dstfile):
@@ -229,9 +231,9 @@ class Store:
 
 
 def _create_store_file(store_file):
-    data = bytearray(1024)
+    data = bytearray(1024 * 1024)
     with open(store_file, "wb") as f:
-        for i in range(0, 3000 * 1024):
+        for i in range(0, 3000):
             f.write(data)
 
 #   ret = _exec("/sbin/mkfs.ext4 -O ^has_journal \"%s\"" % (store_file))

@@ -52,13 +52,21 @@ class TestCmpFile(unittest.TestCase):
             f.save(self.srcdir)
 
         with dirchecksum.Store(self.storeFile, "r") as f:
-            srcfile1 = os.path.join(self.srcdir, "a/a/short.txt")
-            dstfile1 = os.path.join(f.getdir(), "a/a/short.txt")
-            self.assertTrue(f.cmpfile(srcfile1, dstfile1))
+            srcfile = os.path.join(self.srcdir, "a/a/short.txt")
+            dstfile = os.path.join(f.getdir(), "a/a/short.txt")
+            self.assertTrue(f.cmpfile(srcfile, dstfile))
 
-            srcfile2 = os.path.join(self.srcdir, "a/a/long.txt")
-            dstfile2 = os.path.join(f.getdir(), "a/a/long.txt")
-            self.assertTrue(f.cmpfile(srcfile2, dstfile2))
+            srcfile = os.path.join(self.srcdir, "a/a/long.txt")
+            dstfile = os.path.join(f.getdir(), "a/a/long.txt")
+            self.assertTrue(f.cmpfile(srcfile, dstfile))
+
+            srcfile = os.path.join(self.srcdir, "b/symlink1")
+            dstfile = os.path.join(f.getdir(), "b/symlink1")
+            self.assertTrue(f.cmpfile(srcfile, dstfile))
+
+            srcfile = os.path.join(self.srcdir, "b/symlink2")
+            dstfile = os.path.join(f.getdir(), "b/symlink2")
+            self.assertTrue(f.cmpfile(srcfile, dstfile))
 
     def tearDown(self):
         if os.path.exists(self.storeFile):

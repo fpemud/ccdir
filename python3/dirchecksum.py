@@ -83,10 +83,7 @@ class Store:
           2. shrink store file to the initial size when save
     """
 
-    def __init__(self, store_file, mode, mount_point=None):
-        self.fmt = ">Q%ds" % (hashlib.md5(b'').digest_size)
-        self.minsz = struct.calcsize(self.fmt)
-
+    def __init__(self, store_file, mount_point=None):
         if mount_point is None:
             self.mount_point = tempfile.mkdtemp()
             self.btmpdir = True
@@ -94,18 +91,10 @@ class Store:
             self.mount_point = mount_point
             self.btmpdir = False
 
-        self.mode = mode
         try:
-            if self.mode == "r":
-                ret = _exec("/bin/mount -t ext4 -o ro \"%s\" \"%s\"" % (store_file, self.mount_point))
-            elif self.mode == "w":
-                if not os.path.exists(store_file):
-                    _create_store_file(store_file)
-                ret = _exec("/bin/mount -t ext4 \"%s\" \"%s\"" % (store_file, self.mount_point))
-            else:
-                assert False
+            ret = _exec("/usr/bin/squashfuse \"%s\" \"%s\"" % (store_file, self.mount_point))
             if ret != 0:
-                raise InitError("Mouting failed (%s)." % (ret[1]))
+                raise InitError("Mounting failed (%s)." % (ret[1]))
         except:
             if self.btmpdir:
                 os.rmdir(self.mount_point)
@@ -118,18 +107,60 @@ class Store:
         self.close()
 
     def close(self):
-        ret = _exec("/bin/umount \"%s\"" % (self.mount_point))
+        ret = _exec("/usr/bin/fusermount -u \"%s\"" % (self.mount_point))
         assert ret == 0
 
         if self.btmpdir:
             os.rmdir(self.mount_point)
 
-    def save(self, srcdir, including_patterns=None, excluding_patterns=None):
-        if self.mode == "r":
-            raise ArgumentError("Operation \"save\" is not allowed for a read-only store.")
+    def getdir(self):
+        return self.mount_point
 
-        _remove_directory_content(self.mount_point)
+    def cmpfile(self, srcfile, dstfile):
+        if not os.path.lexists(srcfile):
+            raise ArgumentError("Parameter \"srcfile\" does not exist.")
+        if os.path.isdir(srcfile):
+            raise ArgumentError("Parameter \"srcfile\" is a directory.")
 
+        dstfile = os.path.abspath(dstfile)
+        if not dstfile.startswith(self.mount_point + "/"):
+            raise ArgumentError("Parameter \"dstfile\" must be in store file directory.")
+
+        if not os.path.lexists(dstfile) or os.path.isdir(dstfile):
+            return False
+
+        if os.path.islink(srcfile):
+            if not os.path.islink(dstfile):
+                return False
+            if os.readlink(srcfile) != os.readlink(dstfile):
+                return False
+        else:
+            if os.path.islink(dstfile):
+                return False
+            if _get_file_size(dstfile) < _minsz:
+                with open(dstfile, "rb") as f:
+                    with open(srcfile, "rb") as f2:
+                        if f.read() != f2.read():
+                            return False
+            else:
+                with open(dstfile, "rb") as f:
+                    sz, md5 = struct.unpack(_fmt, f.read())
+                    if sz != _get_file_size(srcfile):
+                        return False
+                    if md5 != _get_file_md5(srcfile):
+                        return False
+
+        return True
+
+
+def create_store(srcdir, store_file, including_patterns=None, excluding_patterns=None, tmpdir=None):
+    if tmpdir is None:
+        tmpdir = tempfile.mkdtemp()
+        btmpdir = True
+    else:
+        btmpdir = False
+
+    try:
         srcdir = os.path.abspath(srcdir)
         if srcdir == "/":
             plen = 1
@@ -155,9 +186,9 @@ class Store:
                         filenames.remove(f)
 
             if dirpath == "":
-                dirpath2 = self.mount_point
+                dirpath2 = tmpdir
             else:
-                dirpath2 = os.path.join(self.mount_point, dirpath)
+                dirpath2 = os.path.join(tmpdir, dirpath)
                 os.mkdir(dirpath2)
 
             for fn in filenames:
@@ -165,96 +196,39 @@ class Store:
                 fullfn = os.path.join(srcdir, fn)
                 st = os.lstat(fullfn)
 
-                fn2 = os.path.join(self.mount_point, fn)
+                fn2 = os.path.join(tmpdir, fn)
                 if os.path.islink(fullfn):
                     linkto = os.readlink(fullfn)
                     os.symlink(linkto, fn2)
                     os.lchown(fn2, st.st_uid, st.st_gid)
                 else:
-                    if st.st_size < self.minsz:
+                    if st.st_size < _minsz:
                         shutil.copy2(fullfn, fn2)
                         os.chown(fn2, st.st_uid, st.st_gid)
                     else:
                         md5 = _get_file_md5(fullfn)
                         with open(fn2, "wb") as f:
-                            f.write(struct.pack(self.fmt, st.st_size, md5))
+                            f.write(struct.pack(_fmt, st.st_size, md5))
                             os.fchown(f.fileno(), st.st_uid, st.st_gid)
                         shutil.copymode(fullfn, fn2)
                         shutil.copystat(fullfn, fn2)
 
-    def getdir(self):
-        if self.mode == "w":
-            raise ArgumentError("Operation \"getdir\" is not allowed for a write-only store.")
-
-        return self.mount_point
-
-    def cmpfile(self, srcfile, dstfile):
-        if self.mode == "w":
-            raise ArgumentError("Operation \"cmpfile\" is not allowed for a write-only store.")
-
-        if not os.path.lexists(srcfile):
-            raise ArgumentError("Parameter \"srcfile\" does not exist.")
-        if os.path.isdir(srcfile):
-            raise ArgumentError("Parameter \"srcfile\" is a directory.")
-
-        dstfile = os.path.abspath(dstfile)
-        if not dstfile.startswith(self.mount_point + "/"):
-            raise ArgumentError("Parameter \"dstfile\" must be in store file directory.")
-
-        if not os.path.lexists(dstfile) or os.path.isdir(dstfile):
-            return False
-
-        if os.path.islink(srcfile):
-            if not os.path.islink(dstfile):
-                print("debug1", dstfile)
-                return False
-            if os.readlink(srcfile) != os.readlink(dstfile):
-                print("debug2", os.readlink(srcfile), os.readlink(dstfile))
-                return False
+        ret = _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -noappend" % (tmpdir, store_file))
+        if ret != 0:
+            raise SaveError("Creating store file failed (%s)." % (ret[1]))
+    finally:
+        if btmpdir:
+            shutil.rmtree(tmpdir)
         else:
-            if os.path.islink(dstfile):
-                return False
-            if _get_file_size(dstfile) < self.minsz:
-                with open(dstfile, "rb") as f:
-                    with open(srcfile, "rb") as f2:
-                        if f.read() != f2.read():
-                            return False
-            else:
-                with open(dstfile, "rb") as f:
-                    sz, md5 = struct.unpack(self.fmt, f.read())
-                    if sz != _get_file_size(srcfile):
-                        return False
-                    if md5 != _get_file_md5(srcfile):
-                        return False
-
-        return True
+            _remove_directory_content(tmpdir)
 
 
-def _create_store_file(store_file):
-    with open(store_file, "wb") as f:
-        f.seek(10 * 1024 * 1024 - 1)        # default size is 10MB
-        f.write(b'\x00')
-
-    ret = _exec("/sbin/mkfs.ext2 -b 1024 -i 1024 \"%s\"" % (store_file))
-    if ret != 0:
-        raise InitError("Failed to create store file.")
+# content format for hashed file
+_fmt = ">Q%ds" % (hashlib.md5(b'').digest_size)
 
 
-def _enlarge_store_file(store_file, mnt_dir):
-    ret = _exec("/bin/umount \"%s\"" % (mnt_dir))
-    assert ret == 0
-
-    # double the file size
-    sz = os.path.getsize(store_file)
-    with open(store_file, "ab") as f:
-        f.seek(sz - 1)
-        f.write(b'\x00')
-
-    ret = _exec("/sbin/resize2fs \"%s\"" % (store_file))
-    assert ret == 0
-
-    ret = _exec("/bin/mount -t ext4 \"%s\" \"%s\"" % (store_file, mnt_dir))
-    assert ret == 0
+# minimal size for hashed file
+_minsz = struct.calcsize(_fmt)
 
 
 def _remove_directory_content(dirpath):

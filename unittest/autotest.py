@@ -16,30 +16,11 @@ class TestSave(unittest.TestCase):
         self.storeFile = os.path.join(curDir, "store.dat")
 
     def runTest(self):
-        with dirchecksum.Store(self.storeFile, "w") as f:
-            f.save(self.srcdir)
+        dirchecksum.create_store(self.srcdir, self.storeFile)
 
     def tearDown(self):
         if os.path.exists(self.storeFile):
             os.unlink(self.storeFile)
-
-
-class TestSaveBig(unittest.TestCase):
-    def setUp(self):
-        self.srcdir = os.path.join(curDir, "example")
-        self.storeFile = os.path.join(curDir, "store.dat")
-        self.bigFile = self._createBigFile()
-
-    def runTest(self):
-        with dirchecksum.Store(self.storeFile, "w") as f:
-            f.save(self.srcdir)
-
-    def tearDown(self):
-        os.unlink(self.bigFile)
-        os.unlink(self.storeFile)
-
-    def _createBigFile(self):
-        return None
 
 
 class TestCmpFile(unittest.TestCase):
@@ -48,24 +29,23 @@ class TestCmpFile(unittest.TestCase):
         self.storeFile = os.path.join(curDir, "store.dat")
 
     def runTest(self):
-        with dirchecksum.Store(self.storeFile, "w") as f:
-            f.save(self.srcdir)
+        dirchecksum.create_store(self.srcdir, self.storeFile)
 
-        with dirchecksum.Store(self.storeFile, "r") as f:
-            srcfile = os.path.join(self.srcdir, "a/a/short.txt")
-            dstfile = os.path.join(f.getdir(), "a/a/short.txt")
+        with dirchecksum.Store(self.storeFile) as f:
+            srcfile = os.path.join(self.srcdir, "a/b/short.txt")
+            dstfile = os.path.join(f.getdir(), "a/b/short.txt")
             self.assertTrue(f.cmpfile(srcfile, dstfile))
 
-            srcfile = os.path.join(self.srcdir, "a/a/long.txt")
-            dstfile = os.path.join(f.getdir(), "a/a/long.txt")
+            srcfile = os.path.join(self.srcdir, "a/b/long.txt")
+            dstfile = os.path.join(f.getdir(), "a/b/long.txt")
             self.assertTrue(f.cmpfile(srcfile, dstfile))
 
-            srcfile = os.path.join(self.srcdir, "b/symlink1")
-            dstfile = os.path.join(f.getdir(), "b/symlink1")
+            srcfile = os.path.join(self.srcdir, "c/symlink1")
+            dstfile = os.path.join(f.getdir(), "c/symlink1")
             self.assertTrue(f.cmpfile(srcfile, dstfile))
 
-            srcfile = os.path.join(self.srcdir, "b/symlink2")
-            dstfile = os.path.join(f.getdir(), "b/symlink2")
+            srcfile = os.path.join(self.srcdir, "c/symlink2")
+            dstfile = os.path.join(f.getdir(), "c/symlink2")
             self.assertTrue(f.cmpfile(srcfile, dstfile))
 
     def tearDown(self):
@@ -75,8 +55,7 @@ class TestCmpFile(unittest.TestCase):
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(TestSave())
-#    suite.addTest(TestSaveBig())
+    #suite.addTest(TestSave())
     suite.addTest(TestCmpFile())
     return suite
 

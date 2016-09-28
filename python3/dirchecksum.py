@@ -232,12 +232,29 @@ class Store:
 
 def _create_store_file(store_file):
     with open(store_file, "wb") as f:
-        f.seek(3000 * 1024 * 1024 - 1)
+        f.seek(10 * 1024 * 1024 - 1)        # default size is 10MB
         f.write(b'\x00')
 
     ret = _exec("/sbin/mkfs.ext2 -b 1024 -i 1024 \"%s\"" % (store_file))
     if ret != 0:
         raise InitError("Failed to create store file.")
+
+
+def _enlarge_store_file(store_file, mnt_dir):
+    ret = _exec("/bin/umount \"%s\"" % (mnt_dir))
+    assert ret == 0
+
+    # double the file size
+    sz = os.path.getsize(store_file)
+    with open(store_file, "ab") as f:
+        f.seek(sz - 1)
+        f.write(b'\x00')
+
+    ret = _exec("/sbin/resize2fs \"%s\"" % (store_file))
+    assert ret == 0
+
+    ret = _exec("/bin/mount -t ext4 \"%s\" \"%s\"" % (store_file, mnt_dir))
+    assert ret == 0
 
 
 def _remove_directory_content(dirpath):

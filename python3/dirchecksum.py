@@ -37,9 +37,6 @@ We provide only getdir and cmpfile methods, which are building blocks
 for a full-fledged file/directory compare algorithm, since it
 varies on what should the compare result be.
 
-
-
-
 @author: Fpemud
 @license: GPLv3 License
 @contact: fpemud@sina.com
@@ -157,6 +154,7 @@ def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
             plen = len(srcdir) + 1
 
         for dirpath, dirnames, filenames in os.walk(srcdir):
+            st = os.lstat(dirpath)
             dirpath = dirpath[plen:]
 
             if excluding_patterns is not None:
@@ -172,6 +170,8 @@ def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
             else:
                 dirpath2 = os.path.join(tmpdir, dirpath)
                 os.mkdir(dirpath2)
+                os.chmod(dirpath2, st.st_mode)
+                os.chown(dirpath2, st.st_uid, st.st_gid)
 
             for fn in filenames:
                 fn = os.path.join(dirpath, fn)
@@ -191,8 +191,8 @@ def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
                         md5 = _get_file_md5(fullfn)
                         with open(fn2, "wb") as f:
                             f.write(struct.pack(_fmt, st.st_size, md5))
+                            os.fchmod(f.fileno(), st.st_mode)
                             os.fchown(f.fileno(), st.st_uid, st.st_gid)
-                        shutil.copymode(fullfn, fn2)
                         shutil.copystat(fullfn, fn2)
 
         # use minimum block size, disable any compression, to make squash/unsquash as fast as possible
@@ -202,8 +202,53 @@ def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
     finally:
         if btmpdir:
             shutil.rmtree(tmpdir)
-        else:
-            _remove_directory_content(tmpdir)
+
+
+def create_store2(srcdir, pathlist, store_file, tmpdir=None):
+    if tmpdir is None:
+        tmpdir = tempfile.mkdtemp()
+        btmpdir = True
+    else:
+        btmpdir = False
+
+    try:
+        srcdir = os.path.abspath(srcdir)
+        for path in pathlist:
+            path = os.path.abspath(path)
+            if srcdir == "/":
+                assert path.startswith(srcdir)
+                spath = path[len(srcdir):]
+            else:
+                assert path.startswith(srcdir + "/")
+                spath = path[len(srcdir) + 1:]
+            path2 = os.path.join(tmpdir, spath)
+            st = os.lstat(path)
+
+            if not os.path.exists(os.path.dirname(path2)):
+                os.makedirs(os.path.dirname(path2))
+
+            if os.path.islink(path):
+                linkto = os.readlink(path)
+                os.symlink(linkto, path2)
+                os.lchown(path2, st.st_uid, st.st_gid)
+            elif os.path.isdir(path):
+                os.mkdir(path2)
+                os.chmod(path2, st.st_mode)
+                os.chown(path2, st.st_uid, st.st_gid)
+            else:
+                if st.st_size < _minsz:
+                    shutil.copy2(path, path2)
+                    os.chown(path2, st.st_uid, st.st_gid)
+                else:
+                    md5 = _get_file_md5(path)
+                    with open(path2, "wb") as f:
+                        f.write(struct.pack(_fmt, st.st_size, md5))
+                        os.fchmod(f.fileno(), st.st_mode)
+                        os.fchown(f.fileno(), st.st_uid, st.st_gid)
+                    shutil.copystat(path, path2)
+    finally:
+        if btmpdir:
+            shutil.rmtree(tmpdir)
 
 
 # content format for hashed file

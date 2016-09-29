@@ -23,6 +23,27 @@ class TestSave(unittest.TestCase):
             os.unlink(self.storeFile)
 
 
+class TestSave2(unittest.TestCase):
+    def setUp(self):
+        self.srcdir = os.path.join(curDir, "example")
+        self.storeFile = os.path.join(curDir, "store.dat")
+
+    def runTest(self):
+        pathlist = [
+            os.path.join(self.srcdir, "a"),
+            os.path.join(self.srcdir, "a", "b", "long.txt"),
+            os.path.join(self.srcdir, "a", "b", "short.txt"),
+            os.path.join(self.srcdir, "c", "symlink1"),
+            os.path.join(self.srcdir, "c", "symlink2"),
+        ]
+
+        dirchecksum.create_store2(self.srcdir, pathlist, self.storeFile)
+
+    def tearDown(self):
+        if os.path.exists(self.storeFile):
+            os.unlink(self.storeFile)
+
+
 class TestCmpFile(unittest.TestCase):
     def setUp(self):
         self.srcdir = os.path.join(curDir, "example")
@@ -55,7 +76,8 @@ class TestCmpFile(unittest.TestCase):
 
 def suite():
     suite = unittest.TestSuite()
-    #suite.addTest(TestSave())
+    suite.addTest(TestSave())
+    suite.addTest(TestSave2())
     suite.addTest(TestCmpFile())
     return suite
 

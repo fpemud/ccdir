@@ -24,6 +24,21 @@
 
 """
 dirchecksum
+===========
+
+dirchecksum.Store is a squashfs image, which contains a directory structure
+identical to the original directory.
+
+File content is replaced by the MD5 checksum of the orignal file,
+metadata such as the owner, mode, mtime and xattr can also be
+stored in the image file in the most straight-forward manner.
+
+We provide only getdir and cmpfile methods, which are building blocks
+for a full-fledged file/directory compare algorithm, since it
+varies on what should the compare result be.
+
+
+
 
 @author: Fpemud
 @license: GPLv3 License
@@ -56,32 +71,6 @@ class SaveError(Exception):
 
 
 class Store:
-
-    """
-    dirchecksum.Store creates an EXT4 image file, and establishes a
-    directory structure identical to the original directory.
-
-    File content is replaced by the MD5 checksum of the orignal file,
-    metadata such as the owner, mode, mtime and xattr can also be
-    stored in the image file in the most straight-forward manner.
-
-    EXT4 has the fullest capabilities so we choose it as our file system.
-
-    Unfortunately it must be used by root user since mount is a
-    priviledged operation.
-    What a great world it would be if mount can be used by non-root!
-
-    We provide only getdir and cmpfile methods, which are building blocks
-    for a full-fledged file/directory compare algorithm, since it
-    varies on what should the result be.
-
-    NOTE: There's a read-only implementation of ext4 for FUSE (https://github.com/gerard/ext4fuse),
-    we may use it to eliminate the root user requirement when doing read
-    operations in future.
-
-    TODO: 1. dynamically enlarge store file when save
-          2. shrink store file to the initial size when save
-    """
 
     def __init__(self, store_file, mount_point=None):
         if mount_point is None:

@@ -142,7 +142,7 @@ class Store:
         return True
 
 
-def create_store(srcdir, store_file, including_patterns=None, excluding_patterns=None, tmpdir=None):
+def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
     if tmpdir is None:
         tmpdir = tempfile.mkdtemp()
         btmpdir = True
@@ -165,13 +165,6 @@ def create_store(srcdir, store_file, including_patterns=None, excluding_patterns
                         dirnames.remove(d)
                 for f in filenames:
                     if _in_patterns(os.path.join(dirpath, f), excluding_patterns):
-                        filenames.remove(f)
-            if including_patterns is not None:
-                for d in dirnames:
-                    if not _in_patterns(os.path.join(dirpath, d), including_patterns):
-                        dirnames.remove(d)
-                for f in filenames:
-                    if not _in_patterns(os.path.join(dirpath, f), including_patterns):
                         filenames.remove(f)
 
             if dirpath == "":
@@ -202,7 +195,8 @@ def create_store(srcdir, store_file, including_patterns=None, excluding_patterns
                         shutil.copymode(fullfn, fn2)
                         shutil.copystat(fullfn, fn2)
 
-        ret = _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -noappend" % (tmpdir, store_file))
+        # use minimum block size, disable any compression, to make squash/unsquash as fast as possible
+        ret = _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -b 4096 -noI -noD -noF -noX -noappend" % (tmpdir, store_file))
         if ret != 0:
             raise SaveError("Creating store file failed (%s)." % (ret[1]))
     finally:

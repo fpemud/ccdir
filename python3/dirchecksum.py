@@ -195,8 +195,7 @@ def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
                             os.fchown(f.fileno(), st.st_uid, st.st_gid)
                         shutil.copystat(fullfn, fn2)
 
-        # use minimum block size, disable any compression, to make squash/unsquash as fast as possible
-        ret = _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -b 4096 -noI -noD -noF -noX -noappend" % (tmpdir, store_file))
+        ret = _mksquashfs(tmpdir, store_file)
         if ret != 0:
             raise SaveError("Creating store file failed (%s)." % (ret[1]))
     finally:
@@ -246,6 +245,10 @@ def create_store2(srcdir, pathlist, store_file, tmpdir=None):
                         os.fchmod(f.fileno(), st.st_mode)
                         os.fchown(f.fileno(), st.st_uid, st.st_gid)
                     shutil.copystat(path, path2)
+
+        ret = _mksquashfs(tmpdir, store_file)
+        if ret != 0:
+            raise SaveError("Creating store file failed (%s)." % (ret[1]))
     finally:
         if btmpdir:
             shutil.rmtree(tmpdir)
@@ -275,6 +278,11 @@ def _exec(cmd):
         return 0
     else:
         return (proc.returncode, err.decode("iso-8859-1"))
+
+
+def _mksquashfs(srcdir, dstfile):
+    # use minimum block size, disable any compression, to make squash/unsquash as fast as possible
+    return _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -b 4096 -noI -noD -noF -noX -noappend" % (srcdir, dstfile))
 
 
 def _get_file_size(filepath):

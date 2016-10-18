@@ -223,8 +223,7 @@ def create_store2(srcdir, pathlist, store_file, tmpdir=None):
             path2 = os.path.join(tmpdir, spath)
             st = os.lstat(path)
 
-            if not os.path.exists(os.path.dirname(path2)):
-                os.makedirs(os.path.dirname(path2))
+            os.makedirs(os.path.dirname(path2), exist_ok=True)
 
             if os.path.islink(path):
                 linkto = os.readlink(path)

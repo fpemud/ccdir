@@ -213,7 +213,8 @@ def create_store(srcdir, store_file, including_patterns=None, excluding_patterns
                         shutil.copymode(fullfn, fn2)
                         shutil.copystat(fullfn, fn2)
 
-        ret = _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -noappend" % (tmpdir, store_file))
+        # disable advanced feature to improve performance
+        ret = _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -noappend -noI -noD -noF -noX -no-fragments" % (tmpdir, store_file))
         if ret != 0:
             raise SaveError("Creating store file failed (%s)." % (ret[1]))
     finally:

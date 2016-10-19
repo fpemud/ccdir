@@ -253,9 +253,9 @@ def create_store2(srcdir, pathlist, store_file, tmpdir=None):
         if ret != 0:
             raise SaveError("Creating store file failed (%s)." % (ret[1]))
     finally:
-        if btmpdir:
-            shutil.rmtree(tmpdir)
-
+#        if btmpdir:
+#            shutil.rmtree(tmpdir)
+        print(tmpdir)
 
 # content format for hashed file
 _fmt = ">Q%ds" % (hashlib.md5(b'').digest_size)

@@ -223,11 +223,7 @@ def create_store2(srcdir, pathlist, store_file, tmpdir=None):
             path2 = os.path.join(tmpdir, spath)
             st = os.lstat(path)
 
-            try:
-                os.makedirs(os.path.dirname(path2), exist_ok=True)
-            except OSError:
-                # it's wierd that sometimes os.makedirs(exist_ok=True) raise error when the target directory exists.
-                pass
+            os.makedirs(os.path.dirname(path2), exist_ok=True)
 
             if os.path.islink(path):
                 linkto = os.readlink(path)
@@ -253,9 +249,8 @@ def create_store2(srcdir, pathlist, store_file, tmpdir=None):
         if ret != 0:
             raise SaveError("Creating store file failed (%s)." % (ret[1]))
     finally:
-#        if btmpdir:
-#            shutil.rmtree(tmpdir)
-        print(tmpdir)
+        if btmpdir:
+            shutil.rmtree(tmpdir)
 
 # content format for hashed file
 _fmt = ">Q%ds" % (hashlib.md5(b'').digest_size)

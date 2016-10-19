@@ -24,6 +24,18 @@
 
 """
 dirchecksum
+===========
+
+dirchecksum.Store is a squashfs image, which contains a directory structure
+identical to the original directory.
+
+File content is replaced by the MD5 checksum of the orignal file,
+metadata such as the owner, mode, mtime and xattr can also be
+stored in the image file in the most straight-forward manner.
+
+We provide only getdir and cmpfile methods, which are building blocks
+for a full-fledged file/directory compare algorithm, since it
+varies on what should the compare result be.
 
 @author: Fpemud
 @license: GPLv3 License
@@ -56,32 +68,6 @@ class SaveError(Exception):
 
 
 class Store:
-
-    """
-    dirchecksum.Store creates an EXT4 image file, and establishes a
-    directory structure identical to the original directory.
-
-    File content is replaced by the MD5 checksum of the orignal file,
-    metadata such as the owner, mode, mtime and xattr can also be
-    stored in the image file in the most straight-forward manner.
-
-    EXT4 has the fullest capabilities so we choose it as our file system.
-
-    Unfortunately it must be used by root user since mount is a
-    priviledged operation.
-    What a great world it would be if mount can be used by non-root!
-
-    We provide only getdir and cmpfile methods, which are building blocks
-    for a full-fledged file/directory compare algorithm, since it
-    varies on what should the result be.
-
-    NOTE: There's a read-only implementation of ext4 for FUSE (https://github.com/gerard/ext4fuse),
-    we may use it to eliminate the root user requirement when doing read
-    operations in future.
-
-    TODO: 1. dynamically enlarge store file when save
-          2. shrink store file to the initial size when save
-    """
 
     def __init__(self, store_file, mount_point=None):
         if mount_point is None:
@@ -153,7 +139,7 @@ class Store:
         return True
 
 
-def create_store(srcdir, store_file, including_patterns=None, excluding_patterns=None, tmpdir=None):
+def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
     if tmpdir is None:
         tmpdir = tempfile.mkdtemp()
         btmpdir = True
@@ -168,6 +154,7 @@ def create_store(srcdir, store_file, including_patterns=None, excluding_patterns
             plen = len(srcdir) + 1
 
         for dirpath, dirnames, filenames in os.walk(srcdir):
+            st = os.lstat(dirpath)
             dirpath = dirpath[plen:]
 
             if excluding_patterns is not None:
@@ -177,19 +164,14 @@ def create_store(srcdir, store_file, including_patterns=None, excluding_patterns
                 for f in filenames:
                     if _in_patterns(os.path.join(dirpath, f), excluding_patterns):
                         filenames.remove(f)
-            if including_patterns is not None:
-                for d in dirnames:
-                    if not _in_patterns(os.path.join(dirpath, d), including_patterns):
-                        dirnames.remove(d)
-                for f in filenames:
-                    if not _in_patterns(os.path.join(dirpath, f), including_patterns):
-                        filenames.remove(f)
 
             if dirpath == "":
                 dirpath2 = tmpdir
             else:
                 dirpath2 = os.path.join(tmpdir, dirpath)
                 os.mkdir(dirpath2)
+                os.chmod(dirpath2, st.st_mode)
+                os.chown(dirpath2, st.st_uid, st.st_gid)
 
             for fn in filenames:
                 fn = os.path.join(dirpath, fn)
@@ -209,19 +191,70 @@ def create_store(srcdir, store_file, including_patterns=None, excluding_patterns
                         md5 = _get_file_md5(fullfn)
                         with open(fn2, "wb") as f:
                             f.write(struct.pack(_fmt, st.st_size, md5))
+                            os.fchmod(f.fileno(), st.st_mode)
                             os.fchown(f.fileno(), st.st_uid, st.st_gid)
-                        shutil.copymode(fullfn, fn2)
                         shutil.copystat(fullfn, fn2)
 
-        # disable advanced feature to improve performance
-        ret = _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -noappend -noI -noD -noF -noX -no-fragments" % (tmpdir, store_file))
+        ret = _mksquashfs(tmpdir, store_file)
         if ret != 0:
             raise SaveError("Creating store file failed (%s)." % (ret[1]))
     finally:
         if btmpdir:
             shutil.rmtree(tmpdir)
-        else:
-            _remove_directory_content(tmpdir)
+
+
+def create_store2(srcdir, pathlist, store_file, tmpdir=None):
+    if tmpdir is None:
+        tmpdir = tempfile.mkdtemp()
+        btmpdir = True
+    else:
+        btmpdir = False
+
+    try:
+        srcdir = os.path.abspath(srcdir)
+        for path in pathlist:
+            path = os.path.abspath(path)
+            if srcdir == "/":
+                assert path.startswith(srcdir)
+                spath = path[len(srcdir):]
+            else:
+                assert path.startswith(srcdir + "/")
+                spath = path[len(srcdir) + 1:]
+            path2 = os.path.join(tmpdir, spath)
+            st = os.lstat(path)
+
+            try:
+                os.makedirs(os.path.dirname(path2), exist_ok=True)
+            except OSError:
+                # it's wierd that sometimes os.makedirs(exist_ok=True) raise error when the target directory exists.
+                pass
+
+            if os.path.islink(path):
+                linkto = os.readlink(path)
+                os.symlink(linkto, path2)
+                os.lchown(path2, st.st_uid, st.st_gid)
+            elif os.path.isdir(path):
+                os.mkdir(path2)
+                os.chmod(path2, st.st_mode)
+                os.chown(path2, st.st_uid, st.st_gid)
+            else:
+                if st.st_size < _minsz:
+                    shutil.copy2(path, path2)
+                    os.chown(path2, st.st_uid, st.st_gid)
+                else:
+                    md5 = _get_file_md5(path)
+                    with open(path2, "wb") as f:
+                        f.write(struct.pack(_fmt, st.st_size, md5))
+                        os.fchmod(f.fileno(), st.st_mode)
+                        os.fchown(f.fileno(), st.st_uid, st.st_gid)
+                    shutil.copystat(path, path2)
+
+        ret = _mksquashfs(tmpdir, store_file)
+        if ret != 0:
+            raise SaveError("Creating store file failed (%s)." % (ret[1]))
+    finally:
+        if btmpdir:
+            shutil.rmtree(tmpdir)
 
 
 # content format for hashed file
@@ -248,6 +281,11 @@ def _exec(cmd):
         return 0
     else:
         return (proc.returncode, err.decode("iso-8859-1"))
+
+
+def _mksquashfs(srcdir, dstfile):
+    # use minimum block size, disable any compression, to make squash/unsquash as fast as possible
+    return _exec("/usr/bin/mksquashfs \"%s\" \"%s\" -b 4096 -noI -noD -noF -noX -noappend" % (srcdir, dstfile))
 
 
 def _get_file_size(filepath):

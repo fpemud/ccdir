@@ -10,7 +10,7 @@ except:
     from distutils.core import setup
 
 # check Python's version
-if sys.version_info < (3, 4):
+if sys.version_info < (3, 6):
     sys.stderr.write('This module requires at least Python 3.4\n')
     sys.exit(1)
 
@@ -28,23 +28,24 @@ classif = [
     'Natural Language :: English',
     'Operating System :: POSIX :: Linux',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3.4',
-    'Programming Language :: Python :: 3.5',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
     'Topic :: Software Development :: Libraries :: Python Modules',
 ]
 
 # Do setup
 setup(
-    name='dirchecksum',
+    name='ccdir',
     version='0.0.1',
-    description='Checksum operation for a whole directory',
+    description='Checksum & compare directories',
     author='Fpemud',
     author_email='fpemud@sina.com',
     license='GPLv3 License',
     platforms='Linux',
     classifiers=classif,
-    url='http://github.com/fpemud/dirchecksum',
+    url='http://github.com/fpemud/ccdir',
     download_url='',
-    py_modules=['dirchecksum'],
+    py_modules=['ccdir'],
     package_dir={'': 'python3'},
 )

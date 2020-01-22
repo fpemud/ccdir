@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FILES="python3/dirchecksum.py"
+FILES="python3/ccdir.py"
 ERRFLAG=0
 
 OUTPUT=`pyflakes "${FILES}" 2>&1`
@@ -11,7 +11,7 @@ if [ -n "$OUTPUT" ] ; then
     ERRFLAG=1
 fi
 
-OUTPUT=`pep8 "${FILES}" | grep -v "E501"`
+OUTPUT=`pycodestyle "${FILES}" | grep -v "E501"`
 if [ -n "$OUTPUT" ] ; then
     echo "pep8 errors:"
     echo "$OUTPUT"

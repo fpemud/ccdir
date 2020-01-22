@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-# dirchecksum.py - checksum and metadata store for a whole directory
+# ccdir.py - checksum & compare directories
 #
-# Copyright (c) 2005-2016 Fpemud <fpemud@sina.com>
+# Copyright (c) 2005-2020 Fpemud <fpemud@sina.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -23,10 +23,10 @@
 # THE SOFTWARE.
 
 """
-dirchecksum
+ccdir
 ===========
 
-dirchecksum.Store is a squashfs image, which contains a directory structure
+ccdir.Store is a squashfs image, which contains a directory structure
 identical to the original directory.
 
 File content is replaced by the MD5 checksum of the orignal file,
@@ -81,7 +81,7 @@ class Store:
             ret = _exec("/usr/bin/squashfuse \"%s\" \"%s\"" % (store_file, self.mount_point))
             if ret != 0:
                 raise InitError("Mounting failed (%s)." % (ret[1]))
-        except:
+        except Exception:
             if self.btmpdir:
                 os.rmdir(self.mount_point)
             raise
@@ -139,7 +139,7 @@ class Store:
         return True
 
 
-def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
+def create_store(srcdir, store_file, including_patterns=["*"], excluding_patterns=[], tmpdir=None):
     if tmpdir is None:
         tmpdir = tempfile.mkdtemp()
         btmpdir = True
@@ -157,13 +157,15 @@ def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
             st = os.lstat(dirpath)
             dirpath = dirpath[plen:]
 
-            if excluding_patterns is not None:
-                for d in dirnames:
-                    if _in_patterns(os.path.join(dirpath, d), excluding_patterns):
-                        dirnames.remove(d)
-                for f in filenames:
-                    if _in_patterns(os.path.join(dirpath, f), excluding_patterns):
-                        filenames.remove(f)
+            # filter
+            for d in dirnames:
+                fullpath = os.path.join(dirpath, d)
+                if _in_patterns(fullpath, excluding_patterns) or not _in_patterns(fullpath, including_patterns):
+                    dirnames.remove(d)
+            for f in filenames:
+                fullpath = os.path.join(dirpath, f)
+                if _in_patterns(fullpath, excluding_patterns) or not _in_patterns(fullpath, including_patterns):
+                    filenames.remove(f)
 
             if dirpath == "":
                 dirpath2 = tmpdir
@@ -202,55 +204,6 @@ def create_store(srcdir, store_file, excluding_patterns=None, tmpdir=None):
         if btmpdir:
             shutil.rmtree(tmpdir)
 
-
-def create_store2(srcdir, pathlist, store_file, tmpdir=None):
-    if tmpdir is None:
-        tmpdir = tempfile.mkdtemp()
-        btmpdir = True
-    else:
-        btmpdir = False
-
-    try:
-        srcdir = os.path.abspath(srcdir)
-        for path in pathlist:
-            path = os.path.abspath(path)
-            if srcdir == "/":
-                assert path.startswith(srcdir)
-                spath = path[len(srcdir):]
-            else:
-                assert path.startswith(srcdir + "/")
-                spath = path[len(srcdir) + 1:]
-            path2 = os.path.join(tmpdir, spath)
-            st = os.lstat(path)
-
-            os.makedirs(os.path.dirname(path2), exist_ok=True)
-
-            if os.path.islink(path):
-                linkto = os.readlink(path)
-                os.symlink(linkto, path2)
-                os.lchown(path2, st.st_uid, st.st_gid)
-            elif os.path.isdir(path):
-                os.mkdir(path2)
-                os.chmod(path2, st.st_mode)
-                os.chown(path2, st.st_uid, st.st_gid)
-            else:
-                if st.st_size < _minsz:
-                    shutil.copy2(path, path2)
-                    os.chown(path2, st.st_uid, st.st_gid)
-                else:
-                    md5 = _get_file_md5(path)
-                    with open(path2, "wb") as f:
-                        f.write(struct.pack(_fmt, st.st_size, md5))
-                        os.fchmod(f.fileno(), st.st_mode)
-                        os.fchown(f.fileno(), st.st_uid, st.st_gid)
-                    shutil.copystat(path, path2)
-
-        ret = _mksquashfs(tmpdir, store_file)
-        if ret != 0:
-            raise SaveError("Creating store file failed (%s)." % (ret[1]))
-    finally:
-        if btmpdir:
-            shutil.rmtree(tmpdir)
 
 # content format for hashed file
 _fmt = ">Q%ds" % (hashlib.md5(b'').digest_size)
